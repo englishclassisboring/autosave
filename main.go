@@ -8,7 +8,11 @@ import (
 	"github.com/nu7hatch/gouuid"
 	"log"
 	"net/http"
+	"os"
+	"time"
+	"github.com/joho/godotenv"
 )
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -23,8 +27,8 @@ func wsEndpoint(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 	}
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "", // no password set
+		Addr:     os.Getenv("ADDR"),
+		Password: os.Getenv("PASS"),
 		DB:       0,  // use default DB
 	})
 	u, err := uuid.NewV4()
@@ -41,11 +45,19 @@ func reader(conn *websocket.Conn, rdb *redis.Client, uuid *uuid.UUID) {
 			return
 		}
 		fmt.Println(string(p))
-		errSet := rdb.Set(ctx, uuid.String(), string(p), 60).Err()
+		start := time.Now()
+		errSet := rdb.Set(ctx, uuid.String(), string(p), 10000000000).Err()
+		t := time.Now()
+		elapsed := t.Sub(start)
+		val2, err := rdb.Get(ctx, uuid.String()).Result()
+
+		var mes = "added " + val2+ " at "+ uuid.String() + " - took " + elapsed.String();
+		fmt.Println(mes)
+
 		if errSet != nil {
 			panic(err)
 		}
-		if err := conn.WriteMessage(messageType, p); err != nil {
+		if err := conn.WriteMessage(messageType, []byte(mes)); err != nil {
 			log.Println(err)
 			return
 		}
@@ -53,11 +65,39 @@ func reader(conn *websocket.Conn, rdb *redis.Client, uuid *uuid.UUID) {
 	}
 }
 
+func idHandler(w http.ResponseWriter, r *http.Request) {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     os.Getenv("ADDR"),
+		Password: os.Getenv("PASS"),
+		DB:       0,  // use default DB
+	})
+
+	keys, ok := r.URL.Query()["uuid"]
+
+	if !ok || len(keys[0]) < 1 {
+		log.Println("Url Param 'key' is missing")
+		return
+	}
+	key := keys[0]
+	fmt.Println("getting uuid", key)
+	val2, errget := rdb.Get(ctx, key).Result()
+	if errget != nil {
+		panic(errget)
+	}
+	fmt.Println("get val: ",val2)
+	fmt.Fprintf(w, val2)
+}
 func setupRoutes() {
 	http.HandleFunc("/ws", wsEndpoint)
+	http.HandleFunc("/id", idHandler)
 }
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	fmt.Println("Online")
 	setupRoutes()
 	log.Fatal(http.ListenAndServe(":1234", nil))
