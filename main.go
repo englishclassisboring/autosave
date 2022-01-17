@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
 	"github.com/nu7hatch/gouuid"
 	"log"
 	"net/http"
 	"os"
 	"time"
-	"github.com/joho/godotenv"
 )
 
 var upgrader = websocket.Upgrader{
@@ -29,7 +29,7 @@ func wsEndpoint(w http.ResponseWriter, r *http.Request) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     os.Getenv("ADDR"),
 		Password: os.Getenv("PASS"),
-		DB:       0,  // use default DB
+		DB:       0, // use default DB
 	})
 	u, err := uuid.NewV4()
 	log.Println("Client Connected")
@@ -46,12 +46,12 @@ func reader(conn *websocket.Conn, rdb *redis.Client, uuid *uuid.UUID) {
 		}
 		fmt.Println(string(p))
 		start := time.Now()
-		errSet := rdb.Set(ctx, uuid.String(), string(p), 10000000000).Err()
+		errSet := rdb.Set(ctx, uuid.String(), string(p), 1*time.Minute).Err()
 		t := time.Now()
 		elapsed := t.Sub(start)
 		val2, err := rdb.Get(ctx, uuid.String()).Result()
 
-		var mes = "added " + val2+ " at "+ uuid.String() + " - took " + elapsed.String();
+		var mes = "added " + val2 + " at " + uuid.String() + " - took " + elapsed.String() + "\n http://localhost:1234/id?uuid=" + uuid.String()
 		fmt.Println(mes)
 
 		if errSet != nil {
@@ -69,7 +69,7 @@ func idHandler(w http.ResponseWriter, r *http.Request) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     os.Getenv("ADDR"),
 		Password: os.Getenv("PASS"),
-		DB:       0,  // use default DB
+		DB:       0, // use default DB
 	})
 
 	keys, ok := r.URL.Query()["uuid"]
@@ -84,7 +84,7 @@ func idHandler(w http.ResponseWriter, r *http.Request) {
 	if errget != nil {
 		panic(errget)
 	}
-	fmt.Println("get val: ",val2)
+	fmt.Println("get val: ", val2)
 	fmt.Fprintf(w, val2)
 }
 func setupRoutes() {
